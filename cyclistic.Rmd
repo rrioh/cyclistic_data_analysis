@@ -1,0 +1,166 @@
+---
+title: "How to convert casual users of the bike-share service to annual members"
+author: "Ryo Hamada"
+date: "2025-04-14"
+output: html_document
+---
+
+## Goal of this analysis
+
+We will dive into the data set of a fictional bike-share company in Chicago.
+This data set is about each user's usage history of the service.
+
+We mainly have two purposes.
+
+### 1. Analyze the difference between casual users and annual members.
+
+The company provide users two ways of using the service. Casual user plan, which is pay-as-you-go, and Annual plan.
+(From here, we call users with a casual plan customers, and those with an annual plan subscribers.)
+
+We will discover how users are different between the two plans.
+
+### 2. Find the solution to convert customers to subscribers
+
+In the situation that the annual plan is more profitable for the company, we will analyze and consider the good solution to convert existing customers to subscribers.
+
+## Data we used
+
+We have used the data from [here](https://divvybikes-marketing-staging.lyft.net/system-data), which is in public under [this](https://divvybikes.com/data-license-agreement) license.
+
+We have used the 2019/Q1 data.
+
+- data example
+
+```{r}
+df2019 <- read.csv('Divvy_trips_2019_Q1.csv')
+head(df2019)
+```
+
+### cleaning process
+
+```R
+df1 <- read.csv('Divvy_trips_2019_Q1.csv')
+
+###### cast data type ######
+#  - start_time / end_time -> datetime
+#  - tripduration -> float
+df1$start_time <- as_datetime(df1$start_time)
+df1$end_time <- as_datetime(df1$end_time)
+df1$tripduration <- as.numeric(gsub(",", "", df1$tripduration))
+
+###### null check ######
+df1[!complete.cases(df1),]
+
+# null row ratio
+nrow(df1[!complete.cases(df1),]) / nrow(df1)
+
+# not 100% confident, but probably should remove all rows with missing values
+df1 <- na.omit(df1)
+df1 <- df1[df1$gender != '',]
+
+###### duplicate check ######
+any(duplicated(df1$trip_id))
+# -> no duplicates in trip_id
+
+###### outlier check ######
+# obviously, there are some mistyped values in tripduration
+ggplot(df1) +
+  geom_boxplot(aes(y = tripduration))
+
+# it's hard to determine the border between the normal values and anomalies
+# for now, I treat values more than the 99th quantile as outliers
+df1 <- df1[df1$tripduration <= quantile(df1$tripduration, 0.99),]
+
+table(df1$usertype) # 94% subscriber
+table(df1$gender) # 81% male
+# -> a little bit biased data set
+
+# treat birthyears before 100 or more years ago (as of 2019) as outliers
+df1 <- df1[df1$birthyear > 1919,]
+
+# add a column for the day of the week
+df1$day_of_week <- wday(df1$start_time)
+```
+
+## Analysis
+
+#### Graph.1
+
+- Average trip duration of each day of the week, for customers and subscribers
+  
+```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+df1 <- read.csv('Divvy_trips_2019_Q1.csv')
+df1$start_time <- as_datetime(df1$start_time)
+df1$end_time <- as_datetime(df1$end_time)
+df1$tripduration <- as.numeric(gsub(",", "", df1$tripduration))
+df1 <- na.omit(df1)
+df1 <- df1[df1$gender != '',]
+df1 <- df1[df1$tripduration <= quantile(df1$tripduration, 0.99),]
+df1 <- df1[df1$birthyear > 1919,]
+df1$day_of_week <- wday(df1$start_time)
+```
+
+```{r graph1, echo=FALSE}
+df1 %>%
+  group_by(day_of_week, usertype) %>%
+  summarise(avg_tripduration = mean(tripduration), .groups = "drop") %>%
+  mutate(day_of_week = factor(day_of_week,
+                              levels = 1:7,
+                              labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))) %>%
+  ggplot(aes(x = day_of_week, y = avg_tripduration)) +
+  geom_col() +
+  facet_wrap(~usertype) +
+  labs(x = 'Day of the Week', y = 'Average Trip Duration')
+```
+
+From Graph.1, we can see that customers tend to ride more distances than subscribers. This seems counter-intuitive.
+
+**I consider this is because a lot of customers are tourists, or do not ride a bike on daily basis.**
+
+**A lot of them use bikes as a leisure, not just as a means of transportation.**
+
+The fact that the trip duration on Saturdays and Sundays are longer than other days of the week supports this hypothesis, too.
+
+**On the other hand, subscribers tend to ride almost the same distance, throughout the week. This is probably because it is necessary for them to ride a bike in their life.**
+
+They ride a bike less as a leisure, than customers.
+
+
+#### Graph.2
+
+- The distributions of birth years, for customers and subscribers
+  
+```{r graph2, echo=FALSE}
+ggplot(df1, aes(x = usertype, y = birthyear)) +
+  geom_boxplot(aes(color = gender))
+```
+
+From graph.2, we can see that subscribers are older than customers. Subscribers are around 35~45 years old, and customers are around 25~35.
+
+We can come up with various reasons for this.
+
+**Those with the age of 35~45 might have more money to pay for the annual plan, and less physical endurance than younger people.**
+
+**In addition, there might be more office workers among those with the age of 35~45 compared to younger generations.**
+
+
+## Conclusion: how to convert customers to subscribers
+
+From the analysis above, we could infer that subscribers are 
+
+- older(around 35 to 45) than customers, and
+- need to ride a bike with a certain amount of time every day.
+
+Therefore, **the company should display ads or launch campaigns for those who are at the age of about 35 to 45, and live in Chicago, and might need a bike on regular basis, such as office workers.**
+
+---
+
+With the data set we have explored, I could not dive into deeper.
+
+Especially, I could not clarify exactly what kind of people need to ride a bike on regular basis every day.
+
+If more data sets that can be merged with the data above are provided, I would try to solve it.
+

@@ -1,0 +1,15 @@
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+df2 <- read.csv('Divvy_trips_2020_Q1.csv')
+df2$started_at <- as_datetime(df2$started_at)
+df2$ended_at <- as_datetime(df2$ended_at)
+df2$ride_length_min <- as.numeric(df2$ended_at - df2$started_at) / 60
+df2$day_of_week <- wday(df2$started_at)
+
+df2 %>%
+  group_by(day_of_week, member_casual) %>%
+  summarize(avg_ride_length_min = mean(ride_length_min, na.rm = TRUE)) %>%
+  ggplot(aes(x = day_of_week, y = avg_ride_length_min)) +
+  geom_col() +
+  facet_wrap(~member_casual)
